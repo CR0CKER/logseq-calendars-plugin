@@ -425,13 +425,7 @@ async function openCalendar2(calendarName, url) {
     const cacheBuster = `?nocache=${new Date().getTime()}`;
     const urlWithCacheBuster = url.includes('?') ? `${url}&nocache=${new Date().getTime()}` : url + cacheBuster;
 
-    let response2 = await axios.get(urlWithCacheBuster, {
-      headers: {
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-        'Pragma': 'no-cache',
-        'Expires': '0'
-      }
-    });
+    let response2 = await axios.get(urlWithCacheBuster);
     console.log(response2);
     var hello = await rawParser(response2.data);
     const date = await findDate(preferredDateFormat);
