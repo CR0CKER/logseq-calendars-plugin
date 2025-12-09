@@ -176,12 +176,13 @@ function rawParser(rawData) {
       //@ts-expect-error
       eventsArray.push(rawDataV2[dataValue]); //simplifying results, credits to https://github.com/muness/obsidian-ics for this implementations
     } else {
-      const dates = event.rrule.between(
-        new Date(2021, 0, 1, 0, 0, 0, 0),
-        new Date(2023, 11, 31, 0, 0, 0, 0)
-      );
+      // Generate recurring events from 1 year ago to 2 years in the future
+      const today = new Date();
+      const startDate = new Date(today.getFullYear() - 1, 0, 1, 0, 0, 0, 0);
+      const endDate = new Date(today.getFullYear() + 2, 11, 31, 23, 59, 59, 999);
+      const dates = event.rrule.between(startDate, endDate);
       console.log(dates);
-      if (dates.length === 0) continue;
+      if (!dates || !Array.isArray(dates) || dates.length === 0) continue;
 
       console.log("Summary:", event.summary);
       console.log("Original start:", event.start);
@@ -190,38 +191,39 @@ function rawParser(rawData) {
         `${event.rrule.origOptions.dtstart} [${event.rrule.origOptions.tzid}]`
       );
 
-      dates.forEach((date) => {
-        let newDate;
-        if (event.rrule.origOptions.tzid) {
-          // tzid present (calculate offset from recurrence start)
-          const dateTimezone = moment.tz.zone("UTC");
-          const localTimezone = moment.tz.guess();
-          
-          const tz =
-            event.rrule.origOptions.tzid === localTimezone
-              ? event.rrule.origOptions.tzid
-              : localTimezone;
-          const timezone = moment.tz.zone(tz);
-          const offset =
-            timezone.utcOffset(date) - dateTimezone.utcOffset(date);
-          // newDate = moment(date).add(offset, "minutes").toDate();
-          // console.log(offset)
-          newDate = date
-          //FIXME: this is a hack to get around the fact that the offset is not being calculated correctly
-        } else {
-          // tzid not present (calculate offset from original start)
-          newDate = new Date(
-            date.setHours(
-              date.getHours() -
-                (event.start.getTimezoneOffset() - date.getTimezoneOffset()) /
-                  60
-            )
-          );
-        }
-        const start = moment(newDate);
-        const secondaryEvent = { ...event, start: start["_d"] };
-        eventsArray.push(secondaryEvent);
-      });
+      try {
+        dates.forEach((date) => {
+          let newDate;
+          if (event.rrule.origOptions.tzid) {
+            // tzid present - properly handle timezone conversion
+            const originalStartTime = moment(event.rrule.origOptions.dtstart);
+            const hours = originalStartTime.hours();
+            const minutes = originalStartTime.minutes();
+            const seconds = originalStartTime.seconds();
+
+            // Create moment in the event's timezone with the recurrence date and original time
+            newDate = moment.tz(date, event.rrule.origOptions.tzid)
+              .hours(hours)
+              .minutes(minutes)
+              .seconds(seconds)
+              .toDate();
+          } else {
+            // tzid not present (calculate offset from original start)
+            const hours = event.start.getHours();
+            const minutes = event.start.getMinutes();
+            const seconds = event.start.getSeconds();
+
+            newDate = new Date(date);
+            newDate.setHours(hours, minutes, seconds);
+          }
+          const start = moment(newDate);
+          const secondaryEvent = { ...event, start: start["_d"] };
+          eventsArray.push(secondaryEvent);
+        });
+      } catch (error) {
+        console.error("Error processing recurring event:", event.summary, error);
+        continue;
+      }
 
       console.log(
         "-----------------------------------------------------------------------------------------"
@@ -236,6 +238,12 @@ function parseLocation(rawLocation){
   const matches = rawLocation.match(urlRegexSafe());
   var parsed = rawLocation;
   var linkDesc;
+
+  // If no matches found, return the raw location
+  if (!matches || matches.length === 0) {
+    return parsed;
+  }
+
   for (const match of matches) {
     try{
       var url = new URL(match);
@@ -412,7 +420,18 @@ async function openCalendar2(calendarName, url) {
     const userConfigs = await logseq.App.getUserConfigs();
     const preferredDateFormat = userConfigs.preferredDateFormat;
     logseq.App.showMsg("Fetching Calendar Items");
-    let response2 = await axios.get(url);
+
+    // Add cache-busting parameter to force fresh calendar data
+    const cacheBuster = `?nocache=${new Date().getTime()}`;
+    const urlWithCacheBuster = url.includes('?') ? `${url}&nocache=${new Date().getTime()}` : url + cacheBuster;
+
+    let response2 = await axios.get(urlWithCacheBuster, {
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    });
     console.log(response2);
     var hello = await rawParser(response2.data);
     const date = await findDate(preferredDateFormat);
