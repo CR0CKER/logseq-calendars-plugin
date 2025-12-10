@@ -194,6 +194,7 @@ function rawParser(rawData) {
       try {
         dates.forEach((date) => {
           let newDate;
+          let newEndDate;
           if (event.rrule.origOptions.tzid) {
             // tzid present - properly handle timezone conversion
             const originalStartTime = moment(event.rrule.origOptions.dtstart);
@@ -207,6 +208,12 @@ function rawParser(rawData) {
               .minutes(minutes)
               .seconds(seconds)
               .toDate();
+
+            // Calculate end time based on original duration
+            if (event.end) {
+              const duration = moment(event.end).diff(moment(event.start));
+              newEndDate = moment(newDate).add(duration, 'milliseconds').toDate();
+            }
           } else {
             // tzid not present (calculate offset from original start)
             const hours = event.start.getHours();
@@ -215,9 +222,21 @@ function rawParser(rawData) {
 
             newDate = new Date(date);
             newDate.setHours(hours, minutes, seconds);
+
+            // Calculate end time based on original duration
+            if (event.end) {
+              const duration = event.end.getTime() - event.start.getTime();
+              newEndDate = new Date(newDate.getTime() + duration);
+            }
           }
           const start = moment(newDate);
-          const secondaryEvent = { ...event, start: start["_d"] };
+          const secondaryEvent = {
+            ...event,
+            start: start["_d"],
+            end: newEndDate || event.end,
+            // Preserve timezone info for proper time formatting later
+            timezone: event.rrule.origOptions.tzid
+          };
           eventsArray.push(secondaryEvent);
         });
       } catch (error) {
@@ -304,23 +323,37 @@ function templateFormatter(
   return templatex1;
 }
 
-async function formatTime(rawTimeStamp) {
-  let formattedTimeStamp = new Date(rawTimeStamp);
-  let initialHours = formattedTimeStamp.getHours();
+async function formatTime(rawTimeStamp, timezone = null) {
+  let formattedTimeStamp;
+  let initialHours;
+  let minutes;
+
+  // If timezone is provided, use moment-timezone to get the correct time in that timezone
+  if (timezone) {
+    const momentTime = moment(rawTimeStamp).tz(timezone);
+    initialHours = momentTime.hours();
+    minutes = momentTime.minutes();
+  } else {
+    // No timezone provided, use local time (original behavior)
+    formattedTimeStamp = new Date(rawTimeStamp);
+    initialHours = formattedTimeStamp.getHours();
+    minutes = formattedTimeStamp.getMinutes();
+  }
+
   let hours;
   if (initialHours == 0) {
     hours = "00";
   } else {
     hours = initialHours;
-    if (formattedTimeStamp.getHours() < 10) {
-      hours = "0" + formattedTimeStamp.getHours();
+    if (initialHours < 10) {
+      hours = "0" + initialHours;
     }
   }
   var formattedTime;
-  if (formattedTimeStamp.getMinutes() < 10) {
-    formattedTime = hours + ":" + "0" + formattedTimeStamp.getMinutes();
+  if (minutes < 10) {
+    formattedTime = hours + ":" + "0" + minutes;
   } else {
-    formattedTime = hours + ":" + formattedTimeStamp.getMinutes();
+    formattedTime = hours + ":" + minutes;
   }
   if (
     typeof logseq.settings?.timeFormat == "undefined" ||
@@ -362,8 +395,9 @@ async function insertJournalBlocks(
         formattedStart,
         preferredDateFormat
       );
-      let startTime = await formatTime(formattedStart) ;
-      let endTime = await formatTime(data[dataKey]["end"]);
+      let timezone = data[dataKey]["timezone"] || null;
+      let startTime = await formatTime(formattedStart, timezone);
+      let endTime = await formatTime(data[dataKey]["end"], timezone);
       let location = data[dataKey]["location"];
       let summary;
       summary = data[dataKey]["summary"];
