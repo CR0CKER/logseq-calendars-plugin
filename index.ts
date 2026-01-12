@@ -138,12 +138,52 @@ const settingsTemplate: SettingSchemaDesc[] = [
 logseq.useSettingsSchema(settingsTemplate);
 
 function sortDate(data) {
-  return data.sort(function (a, b) {
-    return (
-      Math.round(new Date(a.start).getTime() / 1000) -
-      Math.round(new Date(b.start).getTime() / 1000)
-    );
+  // Filter out events with invalid dates
+  const validEvents = data.filter(event => {
+    if (!event.start) {
+      return false;
+    }
+    const startDate = new Date(event.start);
+    if (isNaN(startDate.getTime())) {
+      return false;
+    }
+    return true;
   });
+
+  const sorted = validEvents.sort(function (a, b) {
+    // Sort by the displayed date/time in each event's timezone
+    // This ensures events sort by what the user sees (14:30) not absolute time
+    let aMoment, bMoment;
+
+    if (a.timezone) {
+      aMoment = moment(a.start).tz(a.timezone);
+    } else {
+      aMoment = moment(a.start);
+    }
+
+    if (b.timezone) {
+      bMoment = moment(b.start).tz(b.timezone);
+    } else {
+      bMoment = moment(b.start);
+    }
+
+    // Compare by date/time components (year, month, day, hour, minute)
+    // This gives us the "displayed" sort order
+    const aSort = aMoment.year() * 100000000 +
+                  (aMoment.month() + 1) * 1000000 +
+                  aMoment.date() * 10000 +
+                  aMoment.hour() * 100 +
+                  aMoment.minute();
+    const bSort = bMoment.year() * 100000000 +
+                  (bMoment.month() + 1) * 1000000 +
+                  bMoment.date() * 10000 +
+                  bMoment.hour() * 100 +
+                  bMoment.minute();
+
+    return aSort - bSort;
+  });
+
+  return sorted;
 }
 async function findDate(preferredDateFormat) {
   if ((await logseq.Editor.getCurrentPage()) != null) {
@@ -203,11 +243,15 @@ function rawParser(rawData) {
             const seconds = originalStartTime.seconds();
 
             // Create moment in the event's timezone with the recurrence date and original time
-            newDate = moment.tz(date, event.rrule.origOptions.tzid)
-              .hours(hours)
-              .minutes(minutes)
-              .seconds(seconds)
-              .toDate();
+            // Use the date components from the recurrence date, time from original event
+            newDate = moment.tz({
+              year: date.getFullYear(),
+              month: date.getMonth(),
+              date: date.getDate(),
+              hour: hours,
+              minute: minutes,
+              second: seconds
+            }, event.rrule.origOptions.tzid).toDate();
 
             // Calculate end time based on original duration
             if (event.end) {
@@ -387,6 +431,9 @@ async function insertJournalBlocks(
     sibling: true,
     isPageBlock: true,
   })) as BlockEntity;
+
+  // Collect all events for today first, then insert them in order
+  const eventsToInsert = [];
   for (const dataKey in data) {
     try {
       let description = data[dataKey]["description"]; //Parsing result from rawParser into usable data for templateFormatter
@@ -413,32 +460,46 @@ async function insertJournalBlocks(
         location
       );
       if (startDate.toLowerCase() == emptyToday.toLowerCase()) {
-        var currentBlock = await logseq.Editor.insertBlock(
-          startBlock.uuid,
-          `${headerString.replaceAll("\\n", "\n")}`,
-          { sibling: false }
-        );
-        if (logseq.settings?.templateLine2 != "") {
-          let SecondTemplateLine = templateFormatter(
-            logseq.settings?.templateLine2,
-            description,
-            startDate,
-            startTime,
-            endTime,
-            summary,
-            location
-          );
-          await logseq.Editor.insertBlock(
-            currentBlock!.uuid,
-            `${SecondTemplateLine.replaceAll("\\n", "\n")}`,
-            { sibling: false }
-          );
-        }
+        eventsToInsert.push({
+          summary,
+          startTime,
+          headerString,
+          description,
+          startDate,
+          endTime,
+          location
+        });
       }
     } catch (error) {
       console.log(data[dataKey]);
       console.log("error");
       console.log(error);
+    }
+  }
+
+  // Insert events in forward order (sibling:false appends as last child)
+  for (let i = 0; i < eventsToInsert.length; i++) {
+    const event = eventsToInsert[i];
+    var currentBlock = await logseq.Editor.insertBlock(
+      startBlock.uuid,
+      `${event.headerString.replaceAll("\\n", "\n")}`,
+      { sibling: false }
+    );
+    if (logseq.settings?.templateLine2 != "") {
+      let SecondTemplateLine = templateFormatter(
+        logseq.settings?.templateLine2,
+        event.description,
+        event.startDate,
+        event.startTime,
+        event.endTime,
+        event.summary,
+        event.location
+      );
+      await logseq.Editor.insertBlock(
+        currentBlock!.uuid,
+        `${SecondTemplateLine.replaceAll("\\n", "\n")}`,
+        { sibling: false }
+      );
     }
   }
   let updatedBlock = await logseq.Editor.getBlock(startBlock.uuid, {
