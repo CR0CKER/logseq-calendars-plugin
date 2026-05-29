@@ -19,7 +19,7 @@ const settingsTemplate: SettingSchemaDesc[] = [
     default: "{Start} - {End}: {Title}",
     title: "Customizing the Event's Insertion",
     description:
-      "The first block that is inserted right under the calendar name for each event. You can use placeholder variables to customize the block. The following variables are available: {Description}, {Date}, {Start}, {End}, {Title}, {Location}, {RawLocation}",
+      "The first block that is inserted right under the calendar name for each event. You can use placeholder variables to customize the block. The following variables are available: {Description}, {Date}, {Start}, {End}, {Title}, {Location}, {RawLocation}. Participant variables: {ConfirmedParticipants}, {TentativeParticipants}, {PendingParticipants}, {Participants} (requires a feed that includes attendees — many public/secret iCal URLs omit them).",
   },
   {
     key: "useJSON",
@@ -42,7 +42,7 @@ const settingsTemplate: SettingSchemaDesc[] = [
     default: "{Description}",
     title: "Optional: A second block under the event",
     description:
-      "Optionally insert a second block indented under the event. Leave blank if you don't want to insert a second blockYou can use placeholder variables to customize the block. The following variables are available: {Description}, {Date}, {Start}, {End}, {Title}, {Location}, {RawLocation}.",
+      "Optionally insert a second block indented under the event. Leave blank if you don't want to insert a second blockYou can use placeholder variables to customize the block. The following variables are available: {Description}, {Date}, {Start}, {End}, {Title}, {Location}, {RawLocation}. Participant variables: {ConfirmedParticipants}, {TentativeParticipants}, {PendingParticipants}, {Participants} (requires a feed that includes attendees — many public/secret iCal URLs omit them).",
   },
   {
     key: "timeFormat",
@@ -69,6 +69,14 @@ const settingsTemplate: SettingSchemaDesc[] = [
     title: "Hide Events You've Declined",
     description:
       "When your email is configured above, automatically hide events where you've declined the invitation.",
+  },
+  {
+    key: "participantEmailFallback",
+    type: "boolean",
+    default: true,
+    title: "Show email when a participant has no name",
+    description:
+      "For the participant variables ({ConfirmedParticipants}, etc.): when an attendee has no display name, show their email address instead. Disable this to omit nameless attendees entirely. Named participants are always shown as [[links]].",
   },
   {
     key: "calendar1Name",
@@ -208,6 +216,47 @@ function shouldFilterDeclinedEvent(event, userEmail) {
   }
 
   return false;
+}
+
+function getAttendeeName(attendee) {
+  const cn = attendee?.params?.CN;
+  if (!cn) return null;
+  const trimmed = String(cn).trim();
+  if (trimmed === "") return null;
+  // Some providers (notably Google) set CN to the attendee's email address when no
+  // real display name is shared in the feed. Treat an email-shaped CN as "no name"
+  // so it isn't turned into a [[link]] and the email-fallback setting applies.
+  const email = attendee?.val ? attendee.val.replace(/^mailto:/i, "").trim().toLowerCase() : "";
+  if (email && trimmed.toLowerCase() === email) return null;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return null;
+  return trimmed;
+}
+
+// statuses: array of PARTSTAT values to include, e.g. ["ACCEPTED"]
+// Returns a comma-separated list of participants. Named attendees are wrapped in
+// [[...]] so they link to the person's Logseq page. Attendees without a name fall
+// back to their email (shown plain, no link) unless the participantEmailFallback
+// setting is disabled, in which case they are omitted.
+// Excludes the user themselves (matched against userEmail). Empty list -> "".
+function formatParticipants(event, statuses, userEmail) {
+  if (!event.attendee) return "";
+  const attendees = Array.isArray(event.attendee) ? event.attendee : [event.attendee];
+  const normalizedUserEmail = userEmail ? userEmail.trim().toLowerCase() : "";
+  const emailFallback = logseq.settings?.participantEmailFallback !== false;
+  const entries = [];
+  for (const a of attendees) {
+    const partstat = (a?.params?.PARTSTAT || "NEEDS-ACTION").toUpperCase();
+    if (!statuses.includes(partstat)) continue;
+    const email = a?.val ? a.val.replace(/^mailto:/i, "").toLowerCase() : "";
+    if (normalizedUserEmail && email === normalizedUserEmail) continue; // exclude self
+    const name = getAttendeeName(a);
+    if (name) {
+      entries.push(`[[${name}]]`);
+    } else if (emailFallback && a?.val) {
+      entries.push(a.val.replace(/^mailto:/i, ""));
+    }
+  }
+  return entries.join(", ");
 }
 
 function isCancelledEvent(event) {
@@ -452,7 +501,11 @@ function templateFormatter(
   start = "No Start",
   end = "No End",
   title = "No Title",
-  location = "No Location"
+  location = "No Location",
+  confirmedParticipants = "",
+  tentativeParticipants = "",
+  pendingParticipants = "",
+  allParticipants = ""
 ) {
   let properDescription;
   let properLocation;
@@ -476,6 +529,10 @@ function templateFormatter(
     "{Title}": title,
     "{RawLocation}": properLocation,
     "{Location}": parsedLocation,
+    "{ConfirmedParticipants}": confirmedParticipants,
+    "{TentativeParticipants}": tentativeParticipants,
+    "{PendingParticipants}": pendingParticipants,
+    "{Participants}": allParticipants,
   };
   var templatex1 = template;
 
@@ -571,6 +628,12 @@ async function insertJournalBlocks(
       let summary;
       summary = data[dataKey]["summary"];
       // }
+      // Compute participant lists by RSVP status (declined excluded, self excluded)
+      const userEmail = logseq.settings?.userEmail;
+      let confirmed = formatParticipants(data[dataKey], ["ACCEPTED"], userEmail);
+      let tentative = formatParticipants(data[dataKey], ["TENTATIVE"], userEmail);
+      let pending = formatParticipants(data[dataKey], ["NEEDS-ACTION"], userEmail);
+      let everyone = formatParticipants(data[dataKey], ["ACCEPTED", "TENTATIVE", "NEEDS-ACTION"], userEmail);
       // using user provided template
       let headerString = templateFormatter(
         logseq.settings?.template,
@@ -579,7 +642,11 @@ async function insertJournalBlocks(
         startTime,
         endTime,
         summary,
-        location
+        location,
+        confirmed,
+        tentative,
+        pending,
+        everyone
       );
       if (startDate.toLowerCase() == emptyToday.toLowerCase()) {
         eventsToInsert.push({
@@ -589,7 +656,11 @@ async function insertJournalBlocks(
           description,
           startDate,
           endTime,
-          location
+          location,
+          confirmed,
+          tentative,
+          pending,
+          everyone
         });
       }
     } catch (error) {
@@ -615,7 +686,11 @@ async function insertJournalBlocks(
         event.startTime,
         event.endTime,
         event.summary,
-        event.location
+        event.location,
+        event.confirmed,
+        event.tentative,
+        event.pending,
+        event.everyone
       );
       await logseq.Editor.insertBlock(
         currentBlock!.uuid,
@@ -724,7 +799,14 @@ async function main() {
     key: "logseq-ical-sync",
     template: `
       <a class="button" data-on-click="openCalendar2">
-        <i class="ti ti-refresh"></i>
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12.5 21h-6.5a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v5" />
+          <path d="M19 16v6" />
+          <path d="M22 19l-3 3l-3 -3" />
+          <path d="M16 3v4" />
+          <path d="M8 3v4" />
+          <path d="M4 11h16" />
+        </svg>
       </a>
     `,
   });

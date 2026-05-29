@@ -70,6 +70,18 @@ became inactive. All fixes were developed with the assistance of
 | `{Description}` | Event description |
 | `{Location}` | Location (URLs shortened to clickable links) |
 | `{RawLocation}` | Location (original text preserved) |
+| `{ConfirmedParticipants}` | Names of attendees who accepted (RSVP = ACCEPTED) |
+| `{TentativeParticipants}` | Names of attendees who replied "maybe" (RSVP = TENTATIVE) |
+| `{PendingParticipants}` | Names of attendees invited but not yet responded |
+| `{Participants}` | All non-declined attendees (confirmed + tentative + pending) |
+
+> **Note on participant variables:** Named attendees are rendered as `[[Name]]` links
+> to their Logseq page. Attendees without a display name fall back to their plain email
+> address, unless you turn off *Show email when a participant has no name* in settings
+> (then they're omitted). Your own address (set in the *Your Email Address* setting) and
+> declined guests are always excluded. These variables only populate when the calendar
+> feed actually includes attendee data — many published/secret iCal URLs (e.g. Google's
+> secret address, iCloud public shares) strip attendees for privacy.
 
 ## Credits & Acknowledgements
 
