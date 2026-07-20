@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "typecheck": "tsc --noEmit",
     "build": "parcel build --no-source-maps index.html --public-url ./"
   },
   "keywords": [],
@@ -21,7 +22,7 @@
     "moment": "^2.29.3",
     "moment-timezone": "^0.5.34",
     "node-ical": "^0.14.1",
-    "re2": "^1.17.7",
+    "re2": "^1.26.0",
     "url-regex-safe": "^3.0.0"
   },
   "logseq": {
@@ -32,6 +33,7 @@
   "devDependencies": {
     "esbuild": "^0.27.1",
     "parcel": "^2.12.0",
-    "path-browserify": "^1.0.1"
+    "path-browserify": "^1.0.1",
+    "typescript": "^5.9.3"
   }
 }

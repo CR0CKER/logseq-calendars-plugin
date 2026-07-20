@@ -1,0 +1,58 @@
+name: CI
+
+# Runs on every PR and on pushes to main. The build is the blocking gate.
+# typecheck and audit are informational for now (the codebase isn't strict-clean
+# and the dependency tree carries known advisories) — promote them to required
+# checks once the typing/dependency buckets land. See tsconfig.json ratchet note.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+      - name: Install dependencies (reproducible)
+        run: npm ci
+      - name: Build (blocking)
+        run: npm run build
+
+  typecheck:
+    runs-on: ubuntu-latest
+    # Non-blocking until index.ts is typed (audit H2/M3). Surfaces the tsc error
+    # count on each PR without blocking merges.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Type-check (informational)
+        run: npm run typecheck
+
+  audit:
+    runs-on: ubuntu-latest
+    # Non-blocking until the dependency-cleanup buckets land (drop axios, etc.).
+    # Dependabot (see .github/dependabot.yml) drives the deps down over time.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+      - name: npm audit (informational, high+)
+        run: npm audit --audit-level=high

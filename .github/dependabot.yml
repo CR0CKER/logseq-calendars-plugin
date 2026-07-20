@@ -1,0 +1,18 @@
+version: 2
+updates:
+  # Runtime + dev npm dependencies. Security updates land regardless of schedule;
+  # version updates are batched weekly and reviewed as code.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      dev-dependencies:
+        dependency-type: development
+
+  # Keep GitHub Actions pins current (paired with SHA-pinning — audit L2).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
