@@ -23,6 +23,26 @@ export interface EventLike {
 }
 
 /**
+ * Neutralize only *executable* Logseq markup \u2014 `{{macro}}` / `{{query}}` /
+ * `{{renderer}}` \u2014 in untrusted calendar text (event summary, location,
+ * description, attendee names), so an event the user didn't author (a meeting
+ * invite, a shared/subscribed calendar) can't run a macro in their graph (audit
+ * finding M1, scoped by user preference).
+ *
+ * Page refs `[[...]]`, block refs `((...))`, and `#tags` are deliberately left
+ * intact and render as written \u2014 users legitimately put these in their own event
+ * titles/descriptions and want them to link. Those are inert (they only link), so
+ * only the `{{ }}` macro form is blocked. A zero-width space is inserted inside
+ * each `{{`/`}}` token: the visible text is unchanged but Logseq no longer parses
+ * it as a macro. Falsy/non-string input is returned unchanged.
+ */
+export function sanitizeForBlock(text: string): string {
+  if (!text) return text;
+  const zw = "\u200B"; // zero-width space
+  return text.replaceAll("{{", `{${zw}{`).replaceAll("}}", `}${zw}}`);
+}
+
+/**
  * Filter out events with a missing/invalid start, then sort ascending by
  * absolute (UTC) start time — which matches the displayed local order.
  */
@@ -118,9 +138,11 @@ export function formatParticipants(
     if (normalizedUserEmail && email === normalizedUserEmail) continue; // exclude self
     const name = getAttendeeName(a);
     if (name) {
-      entries.push(`[[${name}]]`);
+      // Sanitize the (untrusted) name before wrapping it in the plugin's own
+      // [[...]] so a crafted CN can't break out of the link or inject a macro.
+      entries.push(`[[${sanitizeForBlock(name)}]]`);
     } else if (emailFallback && a?.val) {
-      entries.push(a.val.replace(/^mailto:/i, ""));
+      entries.push(sanitizeForBlock(a.val.replace(/^mailto:/i, "")));
     }
   }
   return entries.join(", ");

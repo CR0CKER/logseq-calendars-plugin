@@ -1,12 +1,25 @@
 # Changelog
 
-Last updated: 2026-07-20 01:03 PM CDT
+Last updated: 2026-07-20 01:21 PM CDT
 
 All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Security
+
+- **Neutralize `{{macro}}` markup in untrusted calendar text** (audit finding
+  **M1**). Event summary, description, location, and attendee names come from an
+  external feed; an event the user didn't author (a meeting invite, a shared or
+  subscribed calendar) could carry a `{{query}}` / `{{renderer}}` in its title or
+  description and have it *execute* in the user's graph when rendered. A new
+  `sanitizeForBlock` helper inserts a zero-width space inside each `{{`/`}}` token
+  (visible text unchanged, no longer parsed as a macro) at every render site.
+  Page refs `[[...]]`, block refs `((...))`, and `#tags` are deliberately left
+  intact — they are inert and users legitimately put them in their own event
+  titles/descriptions and want them to link. Covered by tests.
 
 ### Added
 
