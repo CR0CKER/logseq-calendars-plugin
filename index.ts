@@ -6,7 +6,13 @@ import {
   getDateForPageWithoutBrackets,
 } from "logseq-dateutils";
 import moment from "moment-timezone";
-import urlRegexSafe from 'url-regex-safe';
+import {
+  sortDate,
+  shouldFilterDeclinedEvent,
+  formatParticipants,
+  isCancelledEvent,
+  templateFormatter,
+} from "./parsing";
 
 let mainBlockUUID = ""
 // const md = require('markdown-it')().use(require('markdown-it-mark'));
@@ -160,126 +166,6 @@ const settingsTemplate: SettingSchemaDesc[] = [
 ];
 logseq.useSettingsSchema(settingsTemplate);
 
-function sortDate(data) {
-  // Filter out events with invalid dates
-  const validEvents = data.filter(event => {
-    if (!event.start) {
-      return false;
-    }
-    const startDate = new Date(event.start);
-    if (isNaN(startDate.getTime())) {
-      return false;
-    }
-    return true;
-  });
-
-  const sorted = validEvents.sort(function (a, b) {
-    // Sort by absolute time (UTC), which corresponds to the displayed local time
-    // Since we display times in the user's local timezone, sorting by UTC
-    // gives us the correct chronological order
-    return (
-      Math.round(new Date(a.start).getTime() / 1000) -
-      Math.round(new Date(b.start).getTime() / 1000)
-    );
-  });
-
-  return sorted;
-}
-
-function shouldFilterDeclinedEvent(event, userEmail) {
-  // Only filter if email is configured and feature is enabled
-  if (!userEmail || userEmail.trim() === "" || logseq.settings?.hideDeclinedEvents === false) {
-    return false;
-  }
-
-  // If event has no attendees, don't filter
-  if (!event.attendee) {
-    return false;
-  }
-
-  // Normalize attendee to array
-  const attendees = Array.isArray(event.attendee) ? event.attendee : [event.attendee];
-  const normalizedUserEmail = userEmail.trim().toLowerCase();
-
-  // Find user in attendee list
-  const userAttendee = attendees.find(attendee => {
-    if (!attendee.val) return false;
-    const attendeeEmail = attendee.val.replace('mailto:', '').toLowerCase();
-    return attendeeEmail === normalizedUserEmail;
-  });
-
-  // Filter if user declined
-  if (userAttendee && userAttendee.params?.PARTSTAT === 'DECLINED') {
-    console.log(`Filtering declined event: ${event.summary}`);
-    return true;
-  }
-
-  return false;
-}
-
-function getAttendeeName(attendee) {
-  const cn = attendee?.params?.CN;
-  if (!cn) return null;
-  const trimmed = String(cn).trim();
-  if (trimmed === "") return null;
-  // Some providers (notably Google) set CN to the attendee's email address when no
-  // real display name is shared in the feed. Treat an email-shaped CN as "no name"
-  // so it isn't turned into a [[link]] and the email-fallback setting applies.
-  const email = attendee?.val ? attendee.val.replace(/^mailto:/i, "").trim().toLowerCase() : "";
-  if (email && trimmed.toLowerCase() === email) return null;
-  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) return null;
-  return trimmed;
-}
-
-// statuses: array of PARTSTAT values to include, e.g. ["ACCEPTED"]
-// Returns a comma-separated list of participants. Named attendees are wrapped in
-// [[...]] so they link to the person's Logseq page. Attendees without a name fall
-// back to their email (shown plain, no link) unless the participantEmailFallback
-// setting is disabled, in which case they are omitted.
-// Excludes the user themselves (matched against userEmail). Empty list -> "".
-function formatParticipants(event, statuses, userEmail) {
-  if (!event.attendee) return "";
-  const attendees = Array.isArray(event.attendee) ? event.attendee : [event.attendee];
-  const normalizedUserEmail = userEmail ? userEmail.trim().toLowerCase() : "";
-  const emailFallback = logseq.settings?.participantEmailFallback !== false;
-  const entries = [];
-  for (const a of attendees) {
-    const partstat = (a?.params?.PARTSTAT || "NEEDS-ACTION").toUpperCase();
-    if (!statuses.includes(partstat)) continue;
-    const email = a?.val ? a.val.replace(/^mailto:/i, "").toLowerCase() : "";
-    if (normalizedUserEmail && email === normalizedUserEmail) continue; // exclude self
-    const name = getAttendeeName(a);
-    if (name) {
-      entries.push(`[[${name}]]`);
-    } else if (emailFallback && a?.val) {
-      entries.push(a.val.replace(/^mailto:/i, ""));
-    }
-  }
-  return entries.join(", ");
-}
-
-function isCancelledEvent(event) {
-  // Check if event status is CANCELLED
-  // The status property may be a string or an object with val property
-  if (!event.status) {
-    return false;
-  }
-
-  // Handle both string format and object format from node-ical
-  const statusValue = typeof event.status === 'string'
-    ? event.status
-    : event.status.val || event.status;
-
-  const normalizedStatus = statusValue.toString().toUpperCase().trim();
-
-  if (normalizedStatus === 'CANCELLED') {
-    console.log(`Filtering cancelled event: ${event.summary}`);
-    return true;
-  }
-
-  return false;
-}
-
 async function findDate(preferredDateFormat) {
   if ((await logseq.Editor.getCurrentPage()) != null) {
     //@ts-expect-error
@@ -309,7 +195,7 @@ function rawParser(rawData) {
     const event = rawDataV2[dataValue];
     if (typeof event.rrule == "undefined") {
       //@ts-expect-error
-      if (!shouldFilterDeclinedEvent(event, logseq.settings?.userEmail) &&
+      if (!shouldFilterDeclinedEvent(event, logseq.settings?.userEmail, logseq.settings?.hideDeclinedEvents !== false) &&
           !isCancelledEvent(event)) {
         eventsArray.push(rawDataV2[dataValue]); //simplifying results, credits to https://github.com/muness/obsidian-ics for this implementations
       }
@@ -426,7 +312,7 @@ function rawParser(rawData) {
             timezone: event.rrule.origOptions.tzid
           };
 
-          if (!shouldFilterDeclinedEvent(secondaryEvent, logseq.settings?.userEmail) &&
+          if (!shouldFilterDeclinedEvent(secondaryEvent, logseq.settings?.userEmail, logseq.settings?.hideDeclinedEvents !== false) &&
               !isCancelledEvent(secondaryEvent)) {
             eventsArray.push(secondaryEvent);
           }
@@ -442,7 +328,7 @@ function rawParser(rawData) {
           for (const recKey in event.recurrences) {
             const recEvent = event.recurrences[recKey];
 
-            if (!shouldFilterDeclinedEvent(recEvent, logseq.settings?.userEmail) &&
+            if (!shouldFilterDeclinedEvent(recEvent, logseq.settings?.userEmail, logseq.settings?.hideDeclinedEvents !== false) &&
                 !isCancelledEvent(recEvent)) {
               // Each recurrence is a modified instance of the recurring event
               // Add it to the events array with its rescheduled date/time
@@ -468,86 +354,6 @@ function rawParser(rawData) {
   return sortDate(eventsArray);
 }
 
-function parseLocation(rawLocation){
-  const matches = rawLocation.match(urlRegexSafe());
-  var parsed = rawLocation;
-  var linkDesc;
-
-  // If no matches found, return the raw location
-  if (!matches || matches.length === 0) {
-    return parsed;
-  }
-
-  for (const match of matches) {
-    try{
-      var url = new URL(match);
-      linkDesc = url.hostname + '/...';
-    } catch (e){
-      //this really shouldn't happen
-      //but if the regex returns a url that URL doesn't like, just use the whole link
-      linkDesc = match;
-    }
-    //console.log('match', match);
-    parsed = parsed.replace(match, '[' + linkDesc + '](' + match + ')');
-  }
-  return parsed;
-}
-
-function templateFormatter(
-  template,
-  description = "No Description",
-  date = "No Date",
-  start = "No Start",
-  end = "No End",
-  title = "No Title",
-  location = "No Location",
-  confirmedParticipants = "",
-  tentativeParticipants = "",
-  pendingParticipants = "",
-  allParticipants = ""
-) {
-  let properDescription;
-  let properLocation;
-  let parsedLocation;
-  if (description == "") {
-    properDescription = "No Description";
-  } else {
-    properDescription = description;
-  }
-  if (location == "") {
-    properLocation = "No Location";
-  } else {
-    properLocation = location;
-  }
-  parsedLocation = parseLocation(properLocation);
-  let subsitutions = {
-    "{Description}": properDescription,
-    "{Date}": date,
-    "{Start}": start,
-    "{End}": end,
-    "{Title}": title,
-    "{RawLocation}": properLocation,
-    "{Location}": parsedLocation,
-    "{ConfirmedParticipants}": confirmedParticipants,
-    "{TentativeParticipants}": tentativeParticipants,
-    "{PendingParticipants}": pendingParticipants,
-    "{Participants}": allParticipants,
-  };
-  var templatex1 = template;
-
-  for (const substitute in subsitutions) {
-    // replaceAll (not replace) so a variable used more than once in a template
-    // — e.g. "{Title} … {Title}" — is substituted at every occurrence, not just
-    // the first. Both the exact-case and lower-case spellings are replaced.
-    let template2 = templatex1.replaceAll(substitute, subsitutions[substitute]);
-    let template3 = template2.replaceAll(
-      substitute.toLowerCase(),
-      subsitutions[substitute]
-    );
-    templatex1 = template3;
-  }
-  return templatex1;
-}
 
 async function formatTime(rawTimeStamp, timezone = null) {
   let formattedTimeStamp;
@@ -632,10 +438,11 @@ async function insertJournalBlocks(
       // }
       // Compute participant lists by RSVP status (declined excluded, self excluded)
       const userEmail = logseq.settings?.userEmail;
-      let confirmed = formatParticipants(data[dataKey], ["ACCEPTED"], userEmail);
-      let tentative = formatParticipants(data[dataKey], ["TENTATIVE"], userEmail);
-      let pending = formatParticipants(data[dataKey], ["NEEDS-ACTION"], userEmail);
-      let everyone = formatParticipants(data[dataKey], ["ACCEPTED", "TENTATIVE", "NEEDS-ACTION"], userEmail);
+      const emailFallback = logseq.settings?.participantEmailFallback !== false;
+      let confirmed = formatParticipants(data[dataKey], ["ACCEPTED"], userEmail, emailFallback);
+      let tentative = formatParticipants(data[dataKey], ["TENTATIVE"], userEmail, emailFallback);
+      let pending = formatParticipants(data[dataKey], ["NEEDS-ACTION"], userEmail, emailFallback);
+      let everyone = formatParticipants(data[dataKey], ["ACCEPTED", "TENTATIVE", "NEEDS-ACTION"], userEmail, emailFallback);
       // using user provided template
       let headerString = templateFormatter(
         logseq.settings?.template,

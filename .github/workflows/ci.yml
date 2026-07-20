@@ -29,6 +29,20 @@ jobs:
       - name: Build (blocking)
         run: npm run build
 
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+      # Tests exercise ./parsing only (url-regex-safe is mocked), so native
+      # modules aren't needed — skip the gyp builds for speed.
+      - run: npm ci --ignore-scripts
+      - name: Unit tests (blocking)
+        run: npm test
+
   typecheck:
     runs-on: ubuntu-latest
     # Non-blocking until index.ts is typed (audit H2/M3). Surfaces the tsc error
