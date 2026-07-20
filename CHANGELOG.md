@@ -1,12 +1,28 @@
 # Changelog
 
-Last updated: 2026-07-20 12:31 PM CDT
+Last updated: 2026-07-20 12:42 PM CDT
 
 All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Changed
+
+- **Replaced `axios` with the built-in `fetch`** for calendar downloads and removed
+  the `axios` dependency. This eliminates axios from the plugin's fetch/parse path —
+  the surface behind axios' SSRF and prototype-pollution advisories (audit finding
+  **H3**). Calendar data is fetched with `fetch` and parsed from a string via
+  `node-ical`'s synchronous `parseICS`, so no HTTP client touches the response body.
+  - Error handling is now correct: `fetch` does not reject on HTTP error statuses,
+    so the response status is checked explicitly (the old `axios` code string-matched
+    a 404 error message that `fetch` never produces, and silently swallowed other
+    failures). Non-404 failures now surface a message to the user.
+  - Note: `node-ical` still pulls `axios@0.24` transitively, but it is not on the
+    plugin's code path (only its URL-fetch helpers use it, which the plugin doesn't
+    call). Fully removing it requires a `node-ical` major bump — deferred until the
+    parser test suite exists (audit H2); Dependabot will surface it.
 
 ### Added
 

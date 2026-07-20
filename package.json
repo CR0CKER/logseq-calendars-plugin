@@ -17,7 +17,6 @@
   "license": "ISC",
   "dependencies": {
     "@logseq/libs": "0.0.6",
-    "axios": "^0.25.0",
     "logseq-dateutils": "latest",
     "moment": "^2.29.3",
     "moment-timezone": "^0.5.34",
