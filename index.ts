@@ -1,7 +1,6 @@
 import "@logseq/libs";
 import { BlockEntity, PageEntity, SettingSchemaDesc } from "@logseq/libs/dist/LSPlugin.user";
 import ical from "node-ical";
-import axios from "axios";
 import {
   getDateForPage,
   getDateForPageWithoutBrackets,
@@ -717,23 +716,28 @@ async function openCalendar2(calendarName, url) {
     logseq.App.showMsg("Fetching Calendar Items");
 
     // Add cache-busting parameter to force fresh calendar data
-    const cacheBuster = `?nocache=${new Date().getTime()}`;
-    const urlWithCacheBuster = url.includes('?') ? `${url}&nocache=${new Date().getTime()}` : url + cacheBuster;
+    const nocache = `nocache=${new Date().getTime()}`;
+    const urlWithCacheBuster = url.includes("?") ? `${url}&${nocache}` : `${url}?${nocache}`;
 
-    let response2 = await axios.get(urlWithCacheBuster);
-    console.log(response2);
-    var hello = await rawParser(response2.data);
-    const date = await findDate(preferredDateFormat);
-    insertJournalBlocks(
-      hello,
-      preferredDateFormat,
-      calendarName,
-      date
-    );
-  } catch (err) {
-    if (`${err}` == `Error: Request failed with status code 404`) {
-      logseq.App.showMsg("Calendar not found: Check your URL");
+    // fetch (unlike the old axios call) does NOT reject on HTTP error statuses —
+    // only on network failure — so check response.ok explicitly.
+    const response = await fetch(urlWithCacheBuster);
+    if (!response.ok) {
+      if (response.status === 404) {
+        logseq.App.showMsg("Calendar not found: Check your URL");
+      } else {
+        logseq.App.showMsg(`Failed to fetch "${calendarName}" (HTTP ${response.status})`);
+      }
+      console.log(`Calendar fetch failed for ${calendarName}: ${response.status} ${response.statusText}`);
+      return;
     }
+
+    const rawData = await response.text();
+    const hello = await rawParser(rawData);
+    const date = await findDate(preferredDateFormat);
+    insertJournalBlocks(hello, preferredDateFormat, calendarName, date);
+  } catch (err) {
+    logseq.App.showMsg(`Error fetching "${calendarName}". Check the URL and your connection.`);
     console.log(err);
   }
 }
