@@ -20,5 +20,5 @@
     "noEmit": true,
     "strict": true
   },
-  "include": ["index.ts"]
+  "include": ["index.ts", "parsing.ts", "types/**/*.d.ts"]
 }

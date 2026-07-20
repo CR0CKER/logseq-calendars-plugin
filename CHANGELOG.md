@@ -1,6 +1,6 @@
 # Changelog
 
-Last updated: 2026-07-20 12:42 PM CDT
+Last updated: 2026-07-20 12:53 PM CDT
 
 All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -8,8 +8,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Unit test suite** (Jest + ts-jest) for the parsing helpers, run as a blocking
+  CI gate (audit finding **H2**, part 1). 31 tests covering attendee-name
+  resolution, participant formatting, cancelled/declined filtering, event sorting,
+  location link-wrapping, and template substitution — including a **regression
+  test for L1** (a repeated template variable is replaced at every occurrence),
+  verified to fail against the pre-fix `String.replace` code.
+- `types/url-regex-safe.d.ts` — minimal type declaration for the untyped
+  `url-regex-safe` package, so the extracted module type-checks clean.
+
 ### Changed
 
+- **Extracted the framework-free helpers** (`sortDate`, `shouldFilterDeclinedEvent`,
+  `getAttendeeName`, `formatParticipants`, `isCancelledEvent`, `parseLocation`,
+  `templateFormatter`) from `index.ts` into a new **`parsing.ts`** module so they
+  can be unit-tested without a live Logseq environment. These no longer read the
+  `logseq` global — settings (`hideDeclinedEvents`, `participantEmailFallback`) are
+  passed in by the caller. Behavior is unchanged. The recurrence/timezone engine
+  in `rawParser` is extracted separately in a follow-up (audit H2, part 2). This
+  dropped the `tsc` error count from 65 to 50.
 - **Replaced `axios` with the built-in `fetch`** for calendar downloads and removed
   the `axios` dependency. This eliminates axios from the plugin's fetch/parse path —
   the surface behind axios' SSRF and prototype-pollution advisories (audit finding
