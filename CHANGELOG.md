@@ -1,0 +1,74 @@
+# Changelog
+
+Last updated: 2026-07-20 12:15 PM CDT
+
+All notable changes to this project are documented here.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Removed
+
+- **Stop tracking `node_modules/` in git.** The entire dependency tree (~20k files)
+  was committed despite being listed in `.gitignore`. It is now untracked; the build
+  installs from `package-lock.json` as intended. (audit finding **H1**)
+- Untracked committed `.DS_Store` files (root and `.github/`). (audit finding **L3**)
+- Removed the vestigial `yarn.lock`. The project builds with `npm` /
+  `package-lock.json`; the second lockfile was unused and a source of drift.
+- Dropped the unused `tailwind` dependency from `package.json` — it was declared but
+  never imported, and pulled in a large transitive tree (including advisory-bearing
+  packages). Lockfile regenerated. (audit finding **L3**)
+
+### Fixed
+
+- Template variables used more than once in a single template (e.g.
+  `{Title} … {Title}`) now substitute at **every** occurrence instead of only the
+  first, by switching `templateFormatter` from `String.replace` to `replaceAll`.
+  (audit finding **L1**)
+
+## [3.1.0] - 2026
+
+### Added
+
+- Meeting-participant template variables: `{ConfirmedParticipants}`,
+  `{TentativeParticipants}`, `{PendingParticipants}`, `{Participants}`. Named
+  attendees render as `[[links]]`; nameless attendees fall back to their email.
+- `participantEmailFallback` setting to omit nameless attendees instead of showing
+  their email.
+
+### Changed
+
+- Replaced the `ti-*` font toolbar icon with an inline Tabler `calendar-down` SVG,
+  removing the dependency on Logseq's bundled icon set.
+- Detect email-shaped `CN` (Google writes `CN=<email>` when no display name is set)
+  and treat it as nameless so it isn't turned into a broken link.
+
+## [3.0.1]
+
+### Changed
+
+- Toolbar entry registered under the plugin id `logseq-ical-sync` (was the legacy
+  key `open-calendar2`); toolbar icon polished.
+
+## [3.0.0]
+
+### Added
+
+- Community-maintained fork of
+  [sawhney17/logseq-calendars-plugin](https://github.com/sawhney17/logseq-calendars-plugin),
+  published to the Logseq marketplace as **logseq-ical-sync**.
+
+### Fixed
+
+- Recurring events no longer cut off after 2023 (dynamic 1-year-back → 2-years-ahead range).
+- Recurring event times respect their timezone across DST boundaries.
+- Rescheduled recurring occurrences no longer also appear on their original date.
+- Event sorting uses timezone-aware display time.
+- Cancelled events are filtered out.
+- Optional filtering of events the user has declined (`hideDeclinedEvents`).
+
+[Unreleased]: https://github.com/CR0CKER/logseq-calendars-plugin/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/CR0CKER/logseq-calendars-plugin/releases/tag/v3.1.0
+[3.0.1]: https://github.com/CR0CKER/logseq-calendars-plugin/releases/tag/v3.0.1
+[3.0.0]: https://github.com/CR0CKER/logseq-calendars-plugin/releases/tag/v3.0.0
