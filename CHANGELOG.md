@@ -1,12 +1,17 @@
 # Changelog
 
-Last updated: 2026-07-20 03:03 PM CDT
+Last updated: 2026-07-20 03:09 PM CDT
 
 All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Changed
+
+- Fixed the plugin window `<title>` (was a leftover `logseq-wordcount-plugin`) and
+  added a README **Development** section pointing to `RELEASE.md`.
 
 ## [3.2.0] - 2026-07-20
 

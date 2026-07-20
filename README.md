@@ -1,6 +1,6 @@
 # Logseq iCal Sync
 
-Last updated: 2026-07-20 12:31 PM CDT
+Last updated: 2026-07-20 03:09 PM CDT
 
 [![CI](https://github.com/CR0CKER/logseq-calendars-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/CR0CKER/logseq-calendars-plugin/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/CR0CKER/logseq-calendars-plugin)](https://github.com/CR0CKER/logseq-calendars-plugin/releases)
@@ -88,6 +88,20 @@ became inactive. All fixes were developed with the assistance of
 > declined guests are always excluded. These variables only populate when the calendar
 > feed actually includes attendee data — many published/secret iCal URLs (e.g. Google's
 > secret address, iCloud public shares) strip attendees for privacy.
+
+## Development
+
+Built with [Parcel](https://parceljs.org/). Common commands:
+
+```bash
+npm ci            # install (uses the committed lockfile)
+npm test          # run the Jest test suite
+npm run typecheck # tsc --noEmit (strict)
+npm run build     # produce dist/ for loading unpacked
+```
+
+See **[RELEASE.md](./RELEASE.md)** for the release process and the pre-release
+verification checklist.
 
 ## Credits & Acknowledgements
 
