@@ -6,7 +6,7 @@ import {
   getDateForPageWithoutBrackets,
 } from "logseq-dateutils";
 import moment from "moment-timezone";
-import { formatParticipants, templateFormatter } from "./parsing";
+import { formatParticipants, templateFormatter, sanitizeForBlock } from "./parsing";
 import { parseEvents, ParsedCalendar } from "./recurrence";
 
 let mainBlockUUID = ""
@@ -261,7 +261,10 @@ async function insertJournalBlocks(
   const eventsToInsert = [];
   for (const dataKey in data) {
     try {
-      let description = data[dataKey]["description"]; //Parsing result from rawParser into usable data for templateFormatter
+      // Neutralize executable {{macro}}/{{query}} markup in untrusted calendar
+      // text before rendering (audit M1). Page refs [[..]], block refs ((..)) and
+      // #tags are left intact on purpose so users' own event titles still link.
+      let description = sanitizeForBlock(data[dataKey]["description"]); //Parsing result from rawParser into usable data for templateFormatter
       let formattedStart = new Date(data[dataKey]["start"]);
       let startDate = getDateForPageWithoutBrackets(
         formattedStart,
@@ -269,9 +272,9 @@ async function insertJournalBlocks(
       );
       let startTime = await formatTime(formattedStart);
       let endTime = await formatTime(data[dataKey]["end"]);
-      let location = data[dataKey]["location"];
+      let location = sanitizeForBlock(data[dataKey]["location"]);
       let summary;
-      summary = data[dataKey]["summary"];
+      summary = sanitizeForBlock(data[dataKey]["summary"]);
       // }
       // Compute participant lists by RSVP status (declined excluded, self excluded)
       const userEmail = logseq.settings?.userEmail;

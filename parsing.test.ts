@@ -16,6 +16,7 @@ import {
   isCancelledEvent,
   parseLocation,
   templateFormatter,
+  sanitizeForBlock,
   ICalAttendee,
   EventLike,
 } from "./parsing";
@@ -78,6 +79,37 @@ describe("formatParticipants", () => {
   });
   it("normalizes a single (non-array) attendee", () => {
     expect(formatParticipants({ attendee: attendee("mailto:a@x.com", "Ada", "ACCEPTED") }, ["ACCEPTED"], undefined, true)).toBe("[[Ada]]");
+  });
+
+  it("neutralizes a {{macro}} in a hostile attendee name but leaves the link markup (M1)", () => {
+    const e = evt([attendee("mailto:a@x.com", "Ada {{query (and (task TODO))}}", "ACCEPTED")]);
+    const out = formatParticipants(e, ["ACCEPTED"], undefined, true);
+    expect(out.startsWith("[[")).toBe(true);
+    // The executable macro is neutralized (no raw {{ or }} survives)...
+    expect(out).not.toMatch(/\{\{|\}\}/);
+    // ...but page-ref brackets are intentionally preserved (users use them).
+    expect(out).toContain("[[");
+  });
+});
+
+describe("sanitizeForBlock", () => {
+  it("neutralizes {{ }} macros/queries", () => {
+    expect(sanitizeForBlock("{{query (and x)}}")).not.toMatch(/\{\{|\}\}/);
+  });
+  it("leaves page refs, block refs, and tags intact (user preference)", () => {
+    expect(sanitizeForBlock("[[Project X]]")).toBe("[[Project X]]");
+    expect(sanitizeForBlock("((block-ref))")).toBe("((block-ref))");
+    expect(sanitizeForBlock("#standup notes")).toBe("#standup notes");
+  });
+  it("leaves plain text unchanged", () => {
+    expect(sanitizeForBlock("Sprint planning in Room 4B")).toBe("Sprint planning in Room 4B");
+  });
+  it("keeps the visible text of a macro (only zero-width spaces are inserted)", () => {
+    // Stripping the zero-width spaces restores the original.
+    expect(sanitizeForBlock("run {{query x}} now").replace(/\u200B/g, "")).toBe("run {{query x}} now");
+  });
+  it("passes empty string through unchanged", () => {
+    expect(sanitizeForBlock("")).toBe("");
   });
 });
 
