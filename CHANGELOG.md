@@ -1,6 +1,6 @@
 # Changelog
 
-Last updated: 2026-07-20 12:53 PM CDT
+Last updated: 2026-07-20 01:03 PM CDT
 
 All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
+- **Recurrence engine tests** (audit finding **H2**, part 2): `recurrence.test.ts`
+  parses real `.ics` fixtures with node-ical and asserts on the expanded output —
+  weekly expansion, EXDATE exclusion, RECURRENCE-ID rescheduled overrides, the
+  recurrence window, and CANCELLED filtering (37 tests total across the suite).
+- **`typecheck` is now a blocking CI gate.** The codebase is strict-clean
+  (`tsc --noEmit` reports 0 errors, down from 65) after the extraction and light
+  annotation of the remaining `index.ts` adapter functions (audit finding **M3**).
+
+### Changed
+
+- **Extracted the recurrence/timezone engine** from `index.ts`'s `rawParser` into a
+  new pure `recurrence.ts` (`parseEvents`), with the reference "now" injectable for
+  deterministic tests and settings passed in by the caller. `rawParser` is now a
+  thin wrapper that parses the feed and delegates. The RRULE/EXDATE/RECURRENCE-ID
+  algorithm is unchanged (audit finding **H2**, part 2).
 
 - **Unit test suite** (Jest + ts-jest) for the parsing helpers, run as a blocking
   CI gate (audit finding **H2**, part 1). 31 tests covering attendee-name
