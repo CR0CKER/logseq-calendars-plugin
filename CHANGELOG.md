@@ -1,12 +1,24 @@
 # Changelog
 
-Last updated: 2026-07-20 01:21 PM CDT
+Last updated: 2026-07-20 01:29 PM CDT
 
 All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Changed
+
+- **SHA-pin all GitHub Actions and drop the deprecated release-upload steps**
+  (audit finding **L2**). `ncipollo/release-action` and the first-party
+  `actions/checkout` / `actions/setup-node` are now pinned to full commit SHAs
+  (with a version comment) instead of mutable major tags, so a moved tag can't
+  substitute action code; Dependabot's github-actions updates keep the pins
+  current. In `publish.yml`, the two archived `actions/upload-release-asset@v1`
+  steps were removed — `ncipollo/release-action` attaches the release zip and
+  `package.json` via its `artifacts` input — and an explicit least-privilege
+  `permissions: contents: write` was added.
 
 ### Security
 
