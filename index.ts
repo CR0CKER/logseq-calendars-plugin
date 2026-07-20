@@ -537,8 +537,11 @@ function templateFormatter(
   var templatex1 = template;
 
   for (const substitute in subsitutions) {
-    let template2 = templatex1.replace(substitute, subsitutions[substitute]);
-    let template3 = template2.replace(
+    // replaceAll (not replace) so a variable used more than once in a template
+    // — e.g. "{Title} … {Title}" — is substituted at every occurrence, not just
+    // the first. Both the exact-case and lower-case spellings are replaced.
+    let template2 = templatex1.replaceAll(substitute, subsitutions[substitute]);
+    let template3 = template2.replaceAll(
       substitute.toLowerCase(),
       subsitutions[substitute]
     );
