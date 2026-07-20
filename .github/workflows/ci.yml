@@ -28,6 +28,18 @@ jobs:
         run: npm ci
       - name: Build (blocking)
         run: npm run build
+      # Package the built plugin so it can be downloaded and loaded unpacked in
+      # Logseq for testing without a local build (see RELEASE.md).
+      - name: Package plugin
+        run: |
+          mkdir logseq-ical-sync
+          cp README.md package.json icon.png logseq-ical-sync/
+          cp -r dist logseq-ical-sync/
+      - name: Upload unpacked plugin artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: logseq-ical-sync-unpacked
+          path: logseq-ical-sync
 
   test:
     runs-on: ubuntu-latest

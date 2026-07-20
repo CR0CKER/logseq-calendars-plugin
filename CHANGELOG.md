@@ -1,6 +1,6 @@
 # Changelog
 
-Last updated: 2026-07-20 01:29 PM CDT
+Last updated: 2026-07-20 02:02 PM CDT
 
 All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **CI now uploads the built plugin as a downloadable artifact**
+  (`logseq-ical-sync-unpacked`) on every push/PR, so it can be loaded unpacked in
+  Logseq for testing without a local build (Parcel's `lmdb` native dependency has
+  no arm64 prebuilt). See `RELEASE.md`.
 - **SHA-pin all GitHub Actions and drop the deprecated release-upload steps**
   (audit finding **L2**). `ncipollo/release-action` and the first-party
   `actions/checkout` / `actions/setup-node` are now pinned to full commit SHAs
