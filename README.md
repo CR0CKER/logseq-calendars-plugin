@@ -1,5 +1,11 @@
 # Logseq iCal Sync
 
+Last updated: 2026-07-20 12:31 PM CDT
+
+[![CI](https://github.com/CR0CKER/logseq-calendars-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/CR0CKER/logseq-calendars-plugin/actions/workflows/ci.yml)
+[![Latest release](https://img.shields.io/github/v/release/CR0CKER/logseq-calendars-plugin)](https://github.com/CR0CKER/logseq-calendars-plugin/releases)
+[![License: ISC](https://img.shields.io/github/license/CR0CKER/logseq-calendars-plugin)](./LICENSE.md)
+
 > **This is a community-maintained fork** of the original
 > [logseq-calendars-plugin](https://github.com/sawhney17/logseq-calendars-plugin)
 > by [Aryan Sawhney](https://github.com/sawhney17). The original plugin is a

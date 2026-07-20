@@ -1,12 +1,29 @@
 # Changelog
 
-Last updated: 2026-07-20 12:15 PM CDT
+Last updated: 2026-07-20 12:31 PM CDT
 
 All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+- **CI workflow** (`.github/workflows/ci.yml`) on every PR and push to `main`:
+  a blocking `build` gate plus informational `typecheck` and `npm audit` jobs
+  (non-blocking until the typing and dependency buckets land). (audit finding **M2**)
+- **`tsconfig.json`** and a `typecheck` npm script (`tsc --noEmit`, strict target).
+  Enforced non-blocking for now — flip to a required check once `index.ts` is typed.
+  (audit finding **M3**)
+- **`.github/dependabot.yml`** — weekly npm + github-actions update PRs, so the
+  dependency tree and action pins stop rotting. (audit finding **M2**)
+- README status-badge row (CI, latest release, license) and a `Last updated` stamp.
+
+### Changed
+
+- Release workflow (`publish.yml`) now installs with `npm ci` (was `npm install`)
+  for reproducible, lockfile-pinned builds. (audit finding **M2**)
 
 ### Removed
 
