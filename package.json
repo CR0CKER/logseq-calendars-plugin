@@ -22,7 +22,7 @@
     "moment": "^2.29.3",
     "moment-timezone": "^0.5.34",
     "node-ical": "^0.14.1",
-    "re2": "^1.17.7",
+    "re2": "^1.26.0",
     "url-regex-safe": "^3.0.0"
   },
   "logseq": {

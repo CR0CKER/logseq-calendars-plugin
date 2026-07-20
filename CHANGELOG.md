@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Release workflow (`publish.yml`) now installs with `npm ci` (was `npm install`)
   for reproducible, lockfile-pinned builds. (audit finding **M2**)
+- Bumped the build toolchain to **Node 22** (both workflows) and **`re2` to
+  `^1.26.0`**. The old `re2@1.17.7` had no Node-20 prebuilt binary and only
+  built because a compiled binary was committed inside `node_modules`; once that
+  was untracked (finding H1), a clean `npm ci` had to compile re2 from source and
+  failed on Node 20. `re2@1.26` ships a prebuilt but requires Node ≥22. The Node
+  version affects only the build toolchain, not the browser-bundled plugin.
 
 ### Removed
 
