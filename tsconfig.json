@@ -1,12 +1,8 @@
 {
   // Type-check configuration for `npm run typecheck` (tsc --noEmit).
   // Parcel does the actual build/transpile; this config exists purely to gate types.
-  //
-  // RATCHET NOTE: `strict` is the target, but the codebase is not strict-clean yet
-  // (index.ts accesses node-ical's discriminated-union event type without narrowing,
-  // and several params are implicitly `any`). Until those are typed — audit finding
-  // H2/M3, planned for the test+typing bucket — the CI `typecheck` step runs
-  // non-blocking (continue-on-error). Flip it to a required check once tsc is green.
+  // The codebase is strict-clean (0 errors) as of the H2 extraction, so the CI
+  // typecheck step is a blocking gate. Keep it green.
   "compilerOptions": {
     "target": "ES2021",
     "module": "ESNext",
@@ -20,5 +16,5 @@
     "noEmit": true,
     "strict": true
   },
-  "include": ["index.ts", "parsing.ts", "types/**/*.d.ts"]
+  "include": ["index.ts", "parsing.ts", "recurrence.ts", "types/**/*.d.ts"]
 }

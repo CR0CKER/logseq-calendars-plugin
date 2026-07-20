@@ -1,3 +1,7 @@
+// Pin the timezone so date-reconstruction tests are deterministic across machines
+// (the non-tzid recurrence path reads local wall-clock time).
+process.env.TZ = "UTC";
+
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 module.exports = {
   preset: "ts-jest",

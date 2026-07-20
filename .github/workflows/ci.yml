@@ -45,9 +45,6 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
-    # Non-blocking until index.ts is typed (audit H2/M3). Surfaces the tsc error
-    # count on each PR without blocking merges.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,7 +52,7 @@ jobs:
           node-version: '22.x'
           cache: npm
       - run: npm ci --ignore-scripts
-      - name: Type-check (informational)
+      - name: Type-check (blocking)
         run: npm run typecheck
 
   audit:

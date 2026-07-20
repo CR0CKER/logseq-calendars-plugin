@@ -6,13 +6,8 @@ import {
   getDateForPageWithoutBrackets,
 } from "logseq-dateutils";
 import moment from "moment-timezone";
-import {
-  sortDate,
-  shouldFilterDeclinedEvent,
-  formatParticipants,
-  isCancelledEvent,
-  templateFormatter,
-} from "./parsing";
+import { formatParticipants, templateFormatter } from "./parsing";
+import { parseEvents, ParsedCalendar } from "./recurrence";
 
 let mainBlockUUID = ""
 // const md = require('markdown-it')().use(require('markdown-it-mark'));
@@ -166,7 +161,7 @@ const settingsTemplate: SettingSchemaDesc[] = [
 ];
 logseq.useSettingsSchema(settingsTemplate);
 
-async function findDate(preferredDateFormat) {
+async function findDate(preferredDateFormat: string) {
   if ((await logseq.Editor.getCurrentPage()) != null) {
     //@ts-expect-error
     if ((await logseq.Editor.getCurrentPage())["journal?"] == false) {
@@ -187,175 +182,17 @@ async function findDate(preferredDateFormat) {
     return getDateForPageWithoutBrackets(new Date(), preferredDateFormat);
   }
 }
-function rawParser(rawData) {
+function rawParser(rawData: string) {
   logseq.App.showMsg("Parsing Calendar Items");
-  var eventsArray = [];
-  var rawDataV2 = ical.parseICS(rawData);
-  for (const dataValue in rawDataV2) {
-    const event = rawDataV2[dataValue];
-    if (typeof event.rrule == "undefined") {
-      //@ts-expect-error
-      if (!shouldFilterDeclinedEvent(event, logseq.settings?.userEmail, logseq.settings?.hideDeclinedEvents !== false) &&
-          !isCancelledEvent(event)) {
-        eventsArray.push(rawDataV2[dataValue]); //simplifying results, credits to https://github.com/muness/obsidian-ics for this implementations
-      }
-    } else {
-      // Generate recurring events from 1 year ago to 2 years in the future
-      const today = new Date();
-      const startDate = new Date(today.getFullYear() - 1, 0, 1, 0, 0, 0, 0);
-      const endDate = new Date(today.getFullYear() + 2, 11, 31, 23, 59, 59, 999);
-      const dates = event.rrule.between(startDate, endDate);
-      console.log(dates);
-      if (!dates || !Array.isArray(dates) || dates.length === 0) continue;
-
-      console.log("Summary:", event.summary);
-      console.log("Original start:", event.start);
-      console.log(
-        "RRule start:",
-        `${event.rrule.origOptions.dtstart} [${event.rrule.origOptions.tzid}]`
-      );
-
-      // Normalize exdate to an array for easier checking
-      let exdateArray = [];
-      if (event.exdate) {
-        if (typeof event.exdate === 'object') {
-          // exdate can be an array or object with date values
-          // Use Object.values() to extract dates regardless of structure
-          // This handles both [{date}, {date}] and {'2026-01-22': {date}} formats
-          const values = Object.values(event.exdate);
-
-          // Filter to get only valid date values (skip nested objects)
-          exdateArray = values.filter(v => v instanceof Date || (v && typeof v === 'object' && (v.getTime || v._d)));
-
-          console.log(`Excluding ${exdateArray.length} date(s) for ${event.summary}`);
-        } else {
-          // Single date
-          exdateArray = [event.exdate];
-        }
-      }
-
-      try {
-        dates.forEach((date) => {
-          // Check if this date is in the exception list (EXDATE)
-          // Compare dates ignoring time components
-          const isExcluded = exdateArray.some((exdate) => {
-            const exd = new Date(exdate);
-            return (
-              exd.getFullYear() === date.getFullYear() &&
-              exd.getMonth() === date.getMonth() &&
-              exd.getDate() === date.getDate()
-            );
-          });
-
-          // Skip this occurrence if it's been excluded (deleted)
-          if (isExcluded) {
-            console.log(`Skipping excluded date for ${event.summary}: ${date.toISOString().split('T')[0]}`);
-            return;
-          }
-
-          // Check if this occurrence has been modified (rescheduled)
-          // The recurrences property contains modified instances keyed by YYYY-MM-DD
-          if (event.recurrences) {
-            const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-            if (event.recurrences[dateKey]) {
-              console.log(`Skipping original occurrence for ${event.summary} on ${dateKey} (has been rescheduled)`);
-              return;
-            }
-          }
-
-          let newDate;
-          let newEndDate;
-          if (event.rrule.origOptions.tzid) {
-            // tzid present - properly handle timezone conversion
-            const originalStartTime = moment.tz(event.rrule.origOptions.dtstart, event.rrule.origOptions.tzid);
-            const hours = originalStartTime.hours();
-            const minutes = originalStartTime.minutes();
-            const seconds = originalStartTime.seconds();
-
-            // Create moment in the event's timezone with the recurrence date and original time
-            // Use the date components from the recurrence date, time from original event
-            newDate = moment.tz({
-              year: date.getFullYear(),
-              month: date.getMonth(),
-              date: date.getDate(),
-              hour: hours,
-              minute: minutes,
-              second: seconds
-            }, event.rrule.origOptions.tzid).toDate();
-
-            // Calculate end time based on original duration
-            if (event.end) {
-              const duration = moment(event.end).diff(moment(event.start));
-              newEndDate = moment(newDate).add(duration, 'milliseconds').toDate();
-            }
-          } else {
-            // tzid not present (calculate offset from original start)
-            const hours = event.start.getHours();
-            const minutes = event.start.getMinutes();
-            const seconds = event.start.getSeconds();
-
-            newDate = new Date(date);
-            newDate.setHours(hours, minutes, seconds);
-
-            // Calculate end time based on original duration
-            if (event.end) {
-              const duration = event.end.getTime() - event.start.getTime();
-              newEndDate = new Date(newDate.getTime() + duration);
-            }
-          }
-          const start = moment(newDate);
-          const secondaryEvent = {
-            ...event,
-            start: start["_d"],
-            end: newEndDate || event.end,
-            // Preserve timezone info for proper time formatting later
-            timezone: event.rrule.origOptions.tzid
-          };
-
-          if (!shouldFilterDeclinedEvent(secondaryEvent, logseq.settings?.userEmail, logseq.settings?.hideDeclinedEvents !== false) &&
-              !isCancelledEvent(secondaryEvent)) {
-            eventsArray.push(secondaryEvent);
-          }
-        });
-      } catch (error) {
-        console.error("Error processing recurring event:", event.summary, error);
-        continue;
-      }
-
-      // Add rescheduled/modified instances from the recurrences property
-      if (event.recurrences) {
-        try {
-          for (const recKey in event.recurrences) {
-            const recEvent = event.recurrences[recKey];
-
-            if (!shouldFilterDeclinedEvent(recEvent, logseq.settings?.userEmail, logseq.settings?.hideDeclinedEvents !== false) &&
-                !isCancelledEvent(recEvent)) {
-              // Each recurrence is a modified instance of the recurring event
-              // Add it to the events array with its rescheduled date/time
-              eventsArray.push({
-                ...recEvent,
-                // Preserve timezone info if available
-                timezone: event.rrule.origOptions.tzid
-              });
-              console.log(`Added rescheduled instance of ${event.summary}: ${recKey} -> ${new Date(recEvent.start).toISOString().split('T')[0]}`);
-            }
-          }
-        } catch (error) {
-          console.error("Error processing recurrence modifications:", event.summary, error);
-        }
-      }
-
-      console.log(
-        "-----------------------------------------------------------------------------------------"
-      );
-    }
-  }
-  console.log(eventsArray);
-  return sortDate(eventsArray);
+  const parsed = ical.parseICS(rawData);
+  return parseEvents(parsed as unknown as ParsedCalendar, {
+    userEmail: logseq.settings?.userEmail,
+    hideDeclined: logseq.settings?.hideDeclinedEvents !== false,
+  });
 }
 
 
-async function formatTime(rawTimeStamp, timezone = null) {
+async function formatTime(rawTimeStamp: Date | string | number, timezone: string | null = null) {
   let formattedTimeStamp;
   let initialHours;
   let minutes;
@@ -401,10 +238,10 @@ async function formatTime(rawTimeStamp, timezone = null) {
 }
 
 async function insertJournalBlocks(
-  data,
+  data: Record<string, any>,
   preferredDateFormat: string,
-  calendarName,
-  emptyToday,
+  calendarName: string,
+  emptyToday: string,
   useCommonBlock = false
 ) {
   // let emptyToday = (getDateForPageWithoutBrackets(new Date(), preferredDateFormat))
@@ -516,7 +353,7 @@ async function insertJournalBlocks(
     logseq.App.showMsg("No events for the day detected");
   }
 }
-async function openCalendar2(calendarName, url) {
+async function openCalendar2(calendarName: string, url: string) {
   try {
     const userConfigs = await logseq.App.getUserConfigs();
     const preferredDateFormat = userConfigs.preferredDateFormat;
@@ -550,7 +387,7 @@ async function openCalendar2(calendarName, url) {
 }
 async function main() {
 
-  let accounts2 = {};
+  let accounts2: Record<string, string> = {};
   if (logseq.settings?.useJSON) {
     accounts2 = logseq.settings.accountsDetails
   }
